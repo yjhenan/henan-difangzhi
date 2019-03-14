@@ -1,0 +1,21 @@
+{
+  "name": "xincaixianzi",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^11.10.4",
+    "cheerio": "^1.0.0-rc.2",
+    "typescript": "^3.3.3333",
+    "xml2json": "^0.11.2"
+  },
+  "dependencies": {
+    "@types/cheerio": "^0.22.11",
+    "iconv-lite": "^0.4.24"
+  }
+}
