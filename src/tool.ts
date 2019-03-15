@@ -1,10 +1,11 @@
 import * as fs from "fs";
+import { promises as fsP } from "fs";
 import * as http from "http";
 import * as path from "path";
 import * as url from "url";
 import iconv from "iconv-lite";
 import cheerio from "cheerio";
-import { urlBook, dirPath, urlHtml } from "..";
+import { dirPath, urlBook } from "..";
 
 class Tool {
     /**
@@ -24,12 +25,12 @@ class Tool {
      * @param dirPath 根路径
      */
     static mkdirAll(dirPath: string) {
-        this.mkdir(path.join(dirPath,"META-INF"))
-        let epub = path.join(dirPath,"EPUB")
+        this.mkdir(path.join(dirPath, "META-INF"))
+        let epub = path.join(dirPath, "OEBPS")
         this.mkdir(epub) // 创建资源目录
-        this.mkdir(path.join(epub,"Text")) // 创建 Text 目录
-        this.mkdir(path.join(epub,"Images")) // 创建 Images 目录
-        this.mkdir(path.join(epub,"Styles")) // 创建 Styles 目录
+        this.mkdir(path.join(epub, "Text")) // 创建 Text 目录
+        this.mkdir(path.join(epub, "Images")) // 创建 Images 目录
+        this.mkdir(path.join(epub, "Styles")) // 创建 Styles 目录
     }
 
     /**
@@ -41,7 +42,7 @@ class Tool {
             http.get(url, res => {
                 let htmlSrting = "";
                 res.on("data", chunk => {
-                    htmlSrting += chunk;
+                    htmlSrting += iconv.decode(chunk, "gb2312");
                 })
                 res.on("end", () => {
                     resolve(htmlSrting);
@@ -63,12 +64,12 @@ class Tool {
             http.get(url, (response) => {
                 if (response.statusCode == 200) {
                     fileName = path.parse(fileName).base; // 去除斜线
-                    let stream = fs.createWriteStream(path.join(dirPath, fileName));
+                    let stream = fs.createWriteStream(path.join(dirPath, fileName))
                     response.pipe(stream).on("close", () => {
                         resolve({ message: "下载成功" + fileName });
                     });
                 }
-                else { 
+                else {
                     reject(new Error(`下载失败，状态码：${response.statusCode}##${url}`));
                 }
             }).on("error", err => reject(new Error(err.message)));
@@ -78,17 +79,35 @@ class Tool {
      * 下载多个文件
      * @param fileArray 文件列表
      * @param dirPath 文件存放路径
+     * @param $opf 配置文件jq
      */
-    static async  downHtmlFiles(fileArray: Array<string>, dirPath: string) {
-        //循环多线程下载
+    static async  downHtmlFiles(fileArray: Array<string>, dirPath: string, $opf: CheerioStatic) {
+        Tool.setHtmlOpf(fileArray, $opf);
+        //循环下载
         for (let i = 0; i < fileArray.length; i++) {
-            let fileName = fileArray[i]; // 文件名
-            let fileUrl = url.resolve(urlBook, fileName); // 组合文件URL
+            /**
+             * 原始文件名：带路径
+             */
+            let file = fileArray[i]; // 文件名
+            /**
+             * 文件下载地址：全路径
+             */
+            let fileUrl = url.resolve(urlBook, file); // 组合文件URL
+            /**
+             * 文件名
+             */
+            const fileName = path.parse(file).base;
             try {
-                await this.downFile(fileUrl, fileName, dirPath);
-                console.log("下载成功" + fileName);
+                // await this.downFile(fileUrl, fileName, dirPath);
+                let html = await this.getHtml(fileUrl) as string;
+                let $ = cheerio.load(html);
+                $ = Tool.setHtml($); // 处理HTML
+                $ = await Tool.setImages($, $opf, fileUrl); // 下载图片
+                // 写入HTML
+                await fsP.writeFile(dirPath + `/OEBPS/Text/${fileName}`, $.html({ decodeEntities: false }))
+                console.log(`下载成功[${i + 1}]：${fileName}`);
             } catch (err) {
-                console.log(err);
+                console.error(err);
                 break;
             }
         }
@@ -97,33 +116,50 @@ class Tool {
     /**
      * 过滤错误或无用的HTML节点及字符串
      * @param pathHtml 需要调整的HTML文本
-     * @param url 当前页面所在路径，默认全局urlHTML
      */
-    static setHtml(pathHtml: Buffer) {
-        return new Promise((resolve, reject) => {
-            let utf8String = iconv.decode(pathHtml, "gb2312");  // 编码
-            utf8String = utf8String.toString().replace(/<script(.*)(src)(.*)>/, "");// 去除错误的script标签
-            utf8String = utf8String.toString().replace(/<(body|BODY)(.*)>/, "<body>");// 去除body标签的属性
-            utf8String = utf8String.toString().replace(/gb2312/i, "utf-8");// 去除body标签的属性
-            const $ = cheerio.load(utf8String);
-            $("script").remove() // 删除js脚本及其标签
-            // fs.writeFile(dirPath + "/EPUB/Text/temp.html", $.html({ decodeEntities: false }), err => err ? reject(err) : resolve());
-            resolve($.html({decodeEntities:false}))
-        })
+    static setHtml($: CheerioStatic) {
+        let temp = $.html({ decodeEntities: false })
+        temp = temp.replace(/<script(.*)(src)(.*)>/, "");// 去除错误的script标签
+        temp = temp.replace(/<(body|BODY)(.*)>/, "<body>");// 去除body标签的属性
+        temp = temp.replace(/gb2312/i, "utf-8");// 去除body标签的属性
+        $ = cheerio.load(temp)
+        $("script").remove() // 删除js脚本及其标签
+        return $
     }
-    static async  setImages(html:string,htmlUrl=urlHtml){
-        const $ = cheerio.load(html);
-        $("img").map(async (index, ele) => {
+    /**
+     * 分析HTML内容下载图片，并添加到配置文件
+     * @param $ 当前HTML的jq
+     * @param $opf 配置文件的jq
+     * @param urlHtml 当前HTML页面的URL
+     */
+    static async setImages($: CheerioStatic, $opf: CheerioStatic, urlHtml: string) {
+        for (const ele of $("img").toArray()) {
             if (ele.attribs.src.includes("gov-space")) {
+                console.log($(ele).attr());
                 $(ele).remove()
             } else {
-                let temp = url.resolve(htmlUrl,ele.attribs.src)
                 // 下载img
-                await this.downFile(url.resolve(htmlUrl,ele.attribs.src),path.basename(ele.attribs.src),path.join(dirPath,"/EPUB/Images"))
-                ele.attribs.src = "../Images/" + path.basename(ele.attribs.src);
+                await this.downFile(url.resolve(urlHtml, ele.attribs.src), path.basename(ele.attribs.src), path.join(dirPath, "/OEBPS/Images"))
+                const imgIndex = $opf("manifest").children(`item[media-type="image/jpeg"]`).length //下载计数
+                console.info(`下载成功[${imgIndex}]${ele.attribs.src}`);
+                $(ele).attr("src", `../Images/${path.basename(ele.attribs.src)}`)
+                $opf("manifest").append(`<item id="${path.basename(ele.attribs.src)}" href="Images/${path.basename(ele.attribs.src)}" media-type="image/jpeg" />`);
             }
+        }
+        return Promise.resolve($)
+    }
+    /**
+     * 根据文件列表添加到opf配置文件
+     * @param fileName 文件名清单
+     * @param $opf 配置文件jq
+     */
+    static setHtmlOpf(fileName: string[], $opf: CheerioStatic) {
+        fileName.forEach((item, index) => {
+            $opf("manifest").append(`<item id="${path.basename(item)}" href="Text/${path.basename(item)}" media-type="application/xhtml+xml" />`);
+            $opf("spine").append(`<itemref idref="${path.basename(item)}" ${index == 0 ? "properties=\"duokan-page-fullscreen\"" : ""} />`);
+            index == 0 ? $opf("guide").append(`<reference type="cover" title="Cover" href="Text/${path.basename(item)}"/>`) : ""
         })
-        return $.html({decodeEntities:false})
+        return $opf
     }
     /**
      * 根据节点返回XML结构字符串
