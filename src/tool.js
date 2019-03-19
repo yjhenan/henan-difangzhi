@@ -143,11 +143,6 @@ class Tool {
                 $(item).remove();
             }
         });
-        // 获取CSS并写入到文件
-        await fs_1.promises.appendFile(__1.dirPath + `/OEBPS/Styles/style.css`, $("style").html()).then(() => {
-            $("link").attr("href", `../Styles/style.css`);
-            $("style").remove();
-        });
         return Promise.resolve($);
     }
     /**
@@ -167,15 +162,23 @@ class Tool {
                 const imgIndex = $opf("manifest").children(`item[media-type="image/jpeg"]`).length; //下载计数
                 console.info(`下载成功[${imgIndex}]${ele.attribs.src}`);
                 $(ele).attr("src", `../Images/${path.basename(ele.attribs.src)}`);
-                $(ele).wrap(`<div class="duokan-image-single"><div>`);
+                $(ele).wrap(`<div class="duokan-image-single"></div>`);
                 $opf("manifest").append(`<item id="${path.basename(ele.attribs.src)}" href="Images/${path.basename(ele.attribs.src)}" media-type="image/jpeg" />`);
                 // 第一个图片为封面
                 if (imgIndex == 0) {
                     $opf("metadata").append(`<meta name="cover" content="${path.basename(ele.attribs.src)}" />`);
+                    const css = $("link").attr("href");
+                    console.log(url.resolve(urlHtml, css), 1111111111111);
+                    await this.downFile(url.resolve(urlHtml, css), "style.css", __1.dirPath + `/OEBPS/Styles/`);
                 }
             }
         }
-        return Promise.resolve($);
+        // 获取CSS并写入到文件
+        return await fs_1.promises.appendFile(__1.dirPath + `/OEBPS/Styles/style.css`, $("style").html()).then(() => {
+            $("link").attr("href", `../Styles/style.css`);
+            $("style").remove();
+            return Promise.resolve($);
+        });
     }
     /**
      * 根据文件列表添加到opf配置文件
@@ -185,7 +188,7 @@ class Tool {
     static setHtmlOpf(fileName, $opf) {
         fileName.forEach((item, index) => {
             $opf("manifest").append(`<item id="${path.basename(item)}" href="Text/${path.basename(item)}" media-type="application/xhtml+xml" />`);
-            $opf("spine").append(`<itemref idref="${path.basename(item)}" ${index == 0 ? "properties=\"duokan-page-fullscreen\"" : ""} />`);
+            $opf("spine").append(`<itemref idref="${path.basename(item)}"/>`);
             index == 0 ? $opf("guide").append(`<reference type="cover" title="Cover" href="Text/${path.basename(item)}"/>`) : "";
             if (index == 0) {
                 $opf;

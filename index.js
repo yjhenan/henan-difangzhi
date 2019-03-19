@@ -71,90 +71,93 @@ let metaINF = `<?xml version="1.0" encoding="UTF-8"?>
  * 创建文件夹目录
  */
 exports.dirPath = path.join(__dirname, "file");
-// getHtml(urlBook).then(res =>{
-//     const $ = cheerio.load(res as string);
-//     $("[src]").map((index,item) =>{
-//         const temp = $(item).attr("src")
-//         if (temp.includes("xml")) {
-//             console.log(temp);
-//             downFile(urlBook+temp,temp,dirPath)
-//         }
-//     })
-// })
-fs_1.promises.readFile("./temp/index.xml").then(async (result) => {
-    /**
-     * XML目录
-     */
-    const $ = cheerio_1.default.load(result, { xmlMode: true });
-    /**
-     * 地方志标题
-     */
-    const title = $("TITLE").children("a").text().replace(/\s/, "");
-    exports.dirPath = path.join(exports.dirPath, title); // 根据标题生产目录
-    tool_1.default.mkdir(exports.dirPath); // 创建根目录
-    tool_1.default.mkdirAll(exports.dirPath); // 创建所以
-    /**
-     * ncx目录
-     */
-    const $ncx = cheerio_1.default.load(ncx, { xmlMode: true });
-    $ncx("docTitle").children("text").text(title);
-    /**
-     * opf组织XML:配置文件
-     */
-    const $opf = cheerio_1.default.load(opf, { xmlMode: true });
-    $opf("dc\\:title").text(title);
-    $opf("dc\\:date").text(new Date().toLocaleDateString());
-    /**
-     * 信息文件写入
-     */
-    await fs_1.promises.writeFile(path.join(exports.dirPath, "/META-INF/container.xml"), metaINF);
-    /**
-     * 下载链接数组
-     */
-    let linkArray = [];
-    $("STRUCTURE").eq(0).children().toArray().map(PIECE => {
-        if (PIECE.attribs) {
-            linkArray.push(PIECE.attribs.link);
-            $ncx("navMap").append(tool_1.default.getNcx(PIECE, linkArray.length));
-            /**
-             * 一级索引
-             */
-            const indexPIECE = linkArray.length;
-            // 下一级
-            PIECE.children.map(CHAPTER => {
-                if (CHAPTER.attribs) {
-                    linkArray.push(CHAPTER.attribs.link);
-                    $ncx(`navPoint[playOrder="${indexPIECE}"]`).append(tool_1.default.getNcx(CHAPTER, linkArray.length));
-                    /**
-                    * 二级索引
-                    */
-                    const indexCHAPTER = linkArray.length;
-                    // 下一级
-                    CHAPTER.children.map(SECTION => {
-                        if (SECTION.attribs) {
-                            linkArray.push(SECTION.attribs.link);
-                            $ncx(`navPoint[playOrder="${indexCHAPTER}"]`).append(tool_1.default.getNcx(SECTION, linkArray.length));
-                        }
-                    });
-                }
-            });
+tool_1.default.mkdir(exports.dirPath);
+tool_1.default.getHtml(exports.urlBook).then(async (res) => {
+    const $ = cheerio_1.default.load(res);
+    for (const item of $("[src]").toArray()) {
+        const temp = $(item).attr("src");
+        if (temp.includes("xml")) {
+            await tool_1.default.downFile(exports.urlBook + temp, temp, exports.dirPath);
+            await main(path.join(exports.dirPath, temp));
         }
-    });
-    linkArray = [...new Set(linkArray)];
-    // 下载
-    await tool_1.default.downHtmlFiles(linkArray, exports.dirPath, $opf);
-    // 写入ncx目录
-    await fs_1.promises.writeFile(path.join(exports.dirPath, "/OEBPS/toc.ncx"), $ncx.html({ decodeEntities: false }));
-    // 写入opf配置
-    await fs_1.promises.writeFile(path.join(exports.dirPath, "/OEBPS/content.opf"), $opf.html({ decodeEntities: false }));
-    // 清理CSS
-    await tool_1.default.cleanCSS();
-    // 打包
-    await zip_local_1.default.sync.zip(exports.dirPath).compress().save(exports.dirPath + ".epub");
-}).catch(err => {
-    if (err)
-        return new Error("打开文件错误！");
+    }
 });
+function main(params) {
+    return fs_1.promises.readFile(params).then(async (result) => {
+        /**
+         * XML目录
+         */
+        const $ = cheerio_1.default.load(result, { xmlMode: true });
+        /**
+         * 地方志标题
+         */
+        const title = $("TITLE").children("a").text().replace(/\s/, "");
+        exports.dirPath = path.join(exports.dirPath, title); // 根据标题生产目录
+        tool_1.default.mkdir(exports.dirPath); // 创建根目录
+        tool_1.default.mkdirAll(exports.dirPath); // 创建所以
+        /**
+         * ncx目录
+         */
+        const $ncx = cheerio_1.default.load(ncx, { xmlMode: true });
+        $ncx("docTitle").children("text").text(title);
+        /**
+         * opf组织XML:配置文件
+         */
+        const $opf = cheerio_1.default.load(opf, { xmlMode: true });
+        $opf("dc\\:title").text(title);
+        $opf("dc\\:date").text(new Date().toLocaleDateString());
+        /**
+         * 信息文件写入
+         */
+        await fs_1.promises.writeFile(path.join(exports.dirPath, "/META-INF/container.xml"), metaINF);
+        /**
+         * 下载链接数组
+         */
+        let linkArray = [];
+        $("STRUCTURE").eq(0).children().toArray().map(PIECE => {
+            if (PIECE.attribs) {
+                linkArray.push(PIECE.attribs.link);
+                $ncx("navMap").append(tool_1.default.getNcx(PIECE, linkArray.length));
+                /**
+                 * 一级索引
+                 */
+                const indexPIECE = linkArray.length;
+                // 下一级
+                PIECE.children.map(CHAPTER => {
+                    if (CHAPTER.attribs) {
+                        linkArray.push(CHAPTER.attribs.link);
+                        $ncx(`navPoint[playOrder="${indexPIECE}"]`).append(tool_1.default.getNcx(CHAPTER, linkArray.length));
+                        /**
+                        * 二级索引
+                        */
+                        const indexCHAPTER = linkArray.length;
+                        // 下一级
+                        CHAPTER.children.map(SECTION => {
+                            if (SECTION.attribs) {
+                                linkArray.push(SECTION.attribs.link);
+                                $ncx(`navPoint[playOrder="${indexCHAPTER}"]`).append(tool_1.default.getNcx(SECTION, linkArray.length));
+                            }
+                        });
+                    }
+                });
+            }
+        });
+        linkArray = [...new Set(linkArray)];
+        // 下载
+        await tool_1.default.downHtmlFiles(linkArray, exports.dirPath, $opf);
+        // 写入ncx目录
+        await fs_1.promises.writeFile(path.join(exports.dirPath, "/OEBPS/toc.ncx"), $ncx.html({ decodeEntities: false }));
+        // 写入opf配置
+        await fs_1.promises.writeFile(path.join(exports.dirPath, "/OEBPS/content.opf"), $opf.html({ decodeEntities: false }));
+        // 清理CSS
+        await tool_1.default.cleanCSS();
+        // 打包
+        await zip_local_1.default.sync.zip(exports.dirPath).compress().save(exports.dirPath + ".epub");
+    }).catch(err => {
+        if (err)
+            return new Error("打开XML文件错误！");
+    });
+}
 // fs.readFile("./file/新蔡县志/OEBPS/Text/t20141125_157895.htm").then(res => {
 //     const $ = cheerio.load(res);
 //     test2($)
