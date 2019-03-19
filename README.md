@@ -26,7 +26,7 @@ node index.ts
 ```sh
 #安装Node.JS后直接
 npm install
-``
+```
 
 ## 注意
 1. 依赖于Node.JS，且node版本 >= 10.x
