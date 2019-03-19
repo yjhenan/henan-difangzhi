@@ -15,13 +15,11 @@ const path = __importStar(require("path"));
 const cheerio_1 = __importDefault(require("cheerio"));
 const fs_1 = require("fs");
 const tool_1 = __importDefault(require("./src/tool"));
-const url_1 = __importDefault(require("url"));
 const zip_local_1 = __importDefault(require("zip-local"));
 /**
  * 地方志网站地址
  */
-exports.urlBook = "http://www.hnsqw.com.cn/zmdsjk/zmdxqz/xcxz/";
-exports.urlHtml = url_1.default.resolve(exports.urlBook, "./201411/");
+exports.urlBook = "http://www.hnsqw.com.cn/zmdsjk/zmdsz/zmddqzs/";
 let ncx = `<?xml version="1.0" encoding="utf-8" ?>
             <!DOCTYPE ncx PUBLIC "-//NISO//DTD ncx 2005-1//EN"
             "http://www.daisy.org/z3986/2005/ncx-2005-1.dtd">
@@ -76,8 +74,11 @@ tool_1.default.getHtml(exports.urlBook).then(async (res) => {
     const $ = cheerio_1.default.load(res);
     for (const item of $("[src]").toArray()) {
         const temp = $(item).attr("src");
+        // 是否是XML文件
         if (temp.includes("xml")) {
+            // 下载目录文件
             await tool_1.default.downFile(exports.urlBook + temp, temp, exports.dirPath);
+            // 调用主要处理
             await main(path.join(exports.dirPath, temp));
         }
     }
@@ -158,14 +159,3 @@ function main(params) {
             return new Error("打开XML文件错误！");
     });
 }
-// fs.readFile("./file/新蔡县志/OEBPS/Text/t20141125_157895.htm").then(res => {
-//     const $ = cheerio.load(res);
-//     test2($)
-//     console.log($.html({ decodeEntities: false }));
-// })
-// function test2($: CheerioStatic) {
-//     $("img").each((index, item) => {
-//         const temp = $(item)
-//         temp.attr("src", 123)
-//     })
-// }

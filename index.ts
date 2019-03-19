@@ -4,14 +4,13 @@ import * as path from "path";
 import cheerio from "cheerio";
 import { promises as fs } from "fs";
 import Tool from "./src/tool";
-import url from "url";
 import zip from "zip-local";
 
 /**
  * 地方志网站地址
  */
-export const urlBook = "http://www.hnsqw.com.cn/zmdsjk/zmdxqz/xcxz/"
-export const urlHtml = url.resolve(urlBook, "./201411/")
+export const urlBook = "http://www.hnsqw.com.cn/zmdsjk/zmdsz/zmddqzs/"
+
 let ncx = `<?xml version="1.0" encoding="utf-8" ?>
             <!DOCTYPE ncx PUBLIC "-//NISO//DTD ncx 2005-1//EN"
             "http://www.daisy.org/z3986/2005/ncx-2005-1.dtd">
@@ -67,8 +66,11 @@ Tool.getHtml(urlBook).then(async res => {
     const $ = cheerio.load(res as string);
     for (const item of $("[src]").toArray()) {
         const temp = $(item).attr("src")
+        // 是否是XML文件
         if (temp.includes("xml")) {
+            // 下载目录文件
             await Tool.downFile(urlBook + temp, temp, dirPath);
+            // 调用主要处理
             await main(path.join(dirPath, temp));
         }
     }
@@ -150,16 +152,3 @@ function main(params: string) {
         if (err) return new Error("打开XML文件错误！")
     })
 }
-
-
-// fs.readFile("./file/新蔡县志/OEBPS/Text/t20141125_157895.htm").then(res => {
-//     const $ = cheerio.load(res);
-//     test2($)
-//     console.log($.html({ decodeEntities: false }));
-// })
-// function test2($: CheerioStatic) {
-//     $("img").each((index, item) => {
-//         const temp = $(item)
-//         temp.attr("src", 123)
-//     })
-// }

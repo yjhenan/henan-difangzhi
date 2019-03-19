@@ -155,9 +155,8 @@ class Tool {
                 // 第一个图片为封面
                 if (imgIndex == 0) {
                     $opf("metadata").append(`<meta name="cover" content="${path.basename(ele.attribs.src)}" />`)
-                    const css = $("link").attr("href")
-                    console.log(url.resolve(urlHtml, css), 1111111111111);
-
+                    // 提取公共CSS
+                    const css = $("link").attr("href");
                     await this.downFile(url.resolve(urlHtml, css), "style.css", dirPath + `/OEBPS/Styles/`)
                 }
             }
