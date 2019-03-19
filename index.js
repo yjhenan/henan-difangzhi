@@ -51,6 +51,7 @@ let opf = `<?xml version="1.0" encoding="utf-8"?>
                 </metadata>
                 <manifest>
                 <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+                <item id="style.css" href="Styles/style.css" media-type="text/css"/>
                 </manifest>
                 <spine toc="ncx">
                 </spine>
@@ -146,6 +147,9 @@ fs_1.promises.readFile("./temp/index.xml").then(async (result) => {
     await fs_1.promises.writeFile(path.join(exports.dirPath, "/OEBPS/toc.ncx"), $ncx.html({ decodeEntities: false }));
     // 写入opf配置
     await fs_1.promises.writeFile(path.join(exports.dirPath, "/OEBPS/content.opf"), $opf.html({ decodeEntities: false }));
+    // 清理CSS
+    await tool_1.default.cleanCSS();
+    // 打包
     await zip_local_1.default.sync.zip(exports.dirPath).compress().save(exports.dirPath + ".epub");
 }).catch(err => {
     if (err)

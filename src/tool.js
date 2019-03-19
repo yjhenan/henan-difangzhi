@@ -18,6 +18,7 @@ const url = __importStar(require("url"));
 const iconv_lite_1 = __importDefault(require("iconv-lite"));
 const cheerio_1 = __importDefault(require("cheerio"));
 const __1 = require("..");
+const clean_css_1 = __importDefault(require("clean-css"));
 class Tool {
     /**
      * 创建需要的路径
@@ -112,7 +113,7 @@ class Tool {
                 // await this.downFile(fileUrl, fileName, dirPath);
                 let html = await this.getHtml(fileUrl);
                 let $ = cheerio_1.default.load(html);
-                $ = Tool.setHtml($); // 处理HTML
+                $ = await Tool.setHtml($); // 处理HTML
                 $ = await Tool.setImages($, $opf, fileUrl); // 下载图片
                 // 写入HTML
                 await fs_1.promises.writeFile(dirPath + `/OEBPS/Text/${fileName}`, $.html({ decodeEntities: false }));
@@ -128,14 +129,26 @@ class Tool {
      * 过滤错误或无用的HTML节点及字符串
      * @param pathHtml 需要调整的HTML文本
      */
-    static setHtml($) {
+    static async setHtml($) {
         let temp = $.html({ decodeEntities: false });
         temp = temp.replace(/<script(.*)(src)(.*)>/, ""); // 去除错误的script标签
         temp = temp.replace(/<(body|BODY)(.*)>/, "<body>"); // 去除body标签的属性
-        temp = temp.replace(/gb2312/i, "utf-8"); // 去除body标签的属性
-        $ = cheerio_1.default.load(temp);
+        temp = temp.replace(/gb2312/i, "utf-8"); // 改变gb2312为utf-8
+        // temp = temp.replace(/<((table|tbody|td|tr)|(\/(table|tbody|td|tr)))[^>]*>/i, "");// 去除表格标签
+        $ = cheerio_1.default.load(temp, { decodeEntities: false });
         $("script").remove(); // 删除js脚本及其标签
-        return $;
+        $("table").map((index, item) => {
+            let temp = /[\u4e00-\u9fa5]/g.test($(item).html());
+            if (!temp) {
+                $(item).remove();
+            }
+        });
+        // 获取CSS并写入到文件
+        await fs_1.promises.appendFile(__1.dirPath + `/OEBPS/Styles/style.css`, $("style").html()).then(() => {
+            $("link").attr("href", `../Styles/style.css`);
+            $("style").remove();
+        });
+        return Promise.resolve($);
     }
     /**
      * 分析HTML内容下载图片，并添加到配置文件
@@ -146,7 +159,6 @@ class Tool {
     static async setImages($, $opf, urlHtml) {
         for (const ele of $("img").toArray()) {
             if (ele.attribs.src.includes("gov-space")) {
-                console.log($(ele).attr());
                 $(ele).remove();
             }
             else {
@@ -155,10 +167,12 @@ class Tool {
                 const imgIndex = $opf("manifest").children(`item[media-type="image/jpeg"]`).length; //下载计数
                 console.info(`下载成功[${imgIndex}]${ele.attribs.src}`);
                 $(ele).attr("src", `../Images/${path.basename(ele.attribs.src)}`);
-                console.log($(ele).eq(0).attr(), 22222222222222222222);
-                // ele.attribs.src = "../Images/" + path.basename(ele.attribs.src);
+                $(ele).wrap(`<div class="duokan-image-single"><div>`);
                 $opf("manifest").append(`<item id="${path.basename(ele.attribs.src)}" href="Images/${path.basename(ele.attribs.src)}" media-type="image/jpeg" />`);
-                // console.log($opf("manifest").children(`item[media-type="image/jpeg"]`).attr());
+                // 第一个图片为封面
+                if (imgIndex == 0) {
+                    $opf("metadata").append(`<meta name="cover" content="${path.basename(ele.attribs.src)}" />`);
+                }
             }
         }
         return Promise.resolve($);
@@ -172,6 +186,10 @@ class Tool {
         fileName.forEach((item, index) => {
             $opf("manifest").append(`<item id="${path.basename(item)}" href="Text/${path.basename(item)}" media-type="application/xhtml+xml" />`);
             $opf("spine").append(`<itemref idref="${path.basename(item)}" ${index == 0 ? "properties=\"duokan-page-fullscreen\"" : ""} />`);
+            index == 0 ? $opf("guide").append(`<reference type="cover" title="Cover" href="Text/${path.basename(item)}"/>`) : "";
+            if (index == 0) {
+                $opf;
+            }
         });
         return $opf;
     }
@@ -187,6 +205,10 @@ class Tool {
                 </navLabel>
                 <content src="Text/${path.parse(ele.attribs.link).base}"/>
             </navPoint>`;
+    }
+    static async cleanCSS() {
+        const css = await fs_1.promises.readFile(__1.dirPath + `/OEBPS/Styles/style.css`);
+        await fs_1.promises.writeFile(__1.dirPath + `/OEBPS/Styles/style.css`, new clean_css_1.default({ format: "beautify", level: 2 }).minify(css).styles);
     }
 }
 exports.default = Tool;
